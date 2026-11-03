@@ -1,0 +1,8 @@
+.env
+.eptr2-tgt
+data/
+src/data/
+__pycache__/
+.venv/
+.idea/
+*.ipynb_checkpoints

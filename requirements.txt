@@ -1,0 +1,12 @@
+eptr2
+pandas
+pyarrow
+requests
+python-dotenv
+lightgbm
+scikit-learn
+holidays
+streamlit
+plotly
+matplotlib
+jupyter
