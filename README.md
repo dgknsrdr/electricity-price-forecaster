@@ -27,6 +27,8 @@ Electricity suppliers, large industrial consumers and renewable plants decide ho
 │   ├── features.py     # feature engineering
 │   ├── train.py        # model training + time-based backtest
 │   └── predict.py      # daily forecast job
+├── models/             # trained model (lgbm.txt) + feature list
+├── forecasts/          # live forecasts and actuals (updated daily)
 ├── reports/            # backtest predictions and metrics
 ├── app/
 │   └── dashboard.py    # Streamlit app
@@ -44,6 +46,17 @@ python src/features.py                         # leakage-safe features
 python src/train.py                            # walk-forward backtest + final model
 ```
 EPİAŞ requires a free account for API access (register on the EPİAŞ registration platform).
+
+## Live forecasts
+A GitHub Actions workflow (`.github/workflows/daily_forecast.yml`) runs every morning at 10:17 Istanbul time:
+it downloads the latest data, forecasts tomorrow's 24 hourly prices with the saved model and commits them to
+[`forecasts/forecasts.csv`](forecasts/forecasts.csv). Each run also fills in the actual prices for earlier
+forecasts, so the file is a growing, honest out-of-sample track record (model vs. naive baseline).
+
+Run it locally:
+```bash
+python src/predict.py                 # forecast tomorrow
+```
 
 ## Methodology notes
 - **No leakage:** features only use data that would be available at forecast time (morning of D-1).

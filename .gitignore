@@ -2,7 +2,7 @@
 .eptr2-tgt
 data/
 src/data/
-models/
+forecasts_test/
 __pycache__/
 .venv/
 .idea/

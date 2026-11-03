@@ -30,29 +30,38 @@ def to_local_ts(s: pd.Series) -> pd.Series:
 
 
 def load() -> pd.DataFrame:
-    ptf = pd.read_parquet(RAW / "ptf.parquet")
+    return merge_raw(
+        pd.read_parquet(RAW / "ptf.parquet"),
+        pd.read_parquet(RAW / "consumption.parquet"),
+        pd.read_parquet(RAW / "generation.parquet"),
+        pd.read_parquet(RAW / "weather.parquet"),
+    )
+
+
+def merge_raw(ptf, cons, gen, weather, index=None) -> pd.DataFrame:
+    """Merge raw EPİAŞ + weather frames into one hourly table.
+
+    index: optional full hourly index (e.g. extended to tomorrow for forecasting);
+           by default the hours present in the price data.
+    """
     ptf = pd.DataFrame({
         "ts": to_local_ts(ptf["date"]),
         "price": ptf["price"],
         "price_eur": ptf["priceEur"],
     })
 
-    cons = pd.read_parquet(RAW / "consumption.parquet")
     cons = pd.DataFrame({"ts": to_local_ts(cons["date"]), "consumption": cons["consumption"]})
 
-    gen = pd.read_parquet(RAW / "generation.parquet")
     gen = gen.assign(ts=to_local_ts(gen["date"]))[["ts", "total", *GEN_COLS]]
     gen = gen.rename(columns={"total": "generation_total"})
 
-    weather = pd.read_parquet(RAW / "weather.parquet").rename(columns={"time": "ts"})
+    weather = weather.rename(columns={"time": "ts"})
 
-    df = (
-        ptf.merge(cons, on="ts", how="left")
-        .merge(gen, on="ts", how="left")
-        .merge(weather, on="ts", how="left")
-        .sort_values("ts")
-        .set_index("ts")
-    )
+    if index is None:
+        index = pd.DatetimeIndex(ptf["ts"].sort_values())
+    df = pd.DataFrame(index=pd.DatetimeIndex(index, name="ts"))
+    for part in (ptf, cons, gen, weather):
+        df = df.join(part.drop_duplicates("ts").set_index("ts"), how="left")
 
     df["renewable"] = df[RENEWABLE].sum(axis=1)
     df["renewable_share"] = df["renewable"] / df["generation_total"]

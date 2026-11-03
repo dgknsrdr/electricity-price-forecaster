@@ -1,0 +1,7 @@
+eptr2
+pandas
+pyarrow
+requests
+python-dotenv
+lightgbm
+holidays

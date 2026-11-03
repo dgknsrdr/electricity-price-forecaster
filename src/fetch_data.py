@@ -70,6 +70,58 @@ def fetch_eptr(client: EPTR2, key: str, start: date, end: date) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+def make_client() -> EPTR2:
+    """EPİAŞ client; credentials come from .env locally or env vars in GitHub Actions."""
+    load_dotenv(ROOT / ".env")
+    return EPTR2(
+        username=os.environ["EPTR_USERNAME"],
+        password=os.environ["EPTR_PASSWORD"],
+        use_dotenv=False,          # we load .env ourselves (avoids the "not found" warning)
+        tgt_path=str(ROOT),        # keep the login token in the project root (gitignored)
+    )
+
+
+def to_wide(weather: pd.DataFrame) -> pd.DataFrame:
+    """Long (time, city, vars) -> wide: one row per hour, columns like temperature_2m_istanbul."""
+    weather = weather.copy()
+    weather["time"] = pd.to_datetime(weather["time"])
+    weather = weather.drop_duplicates(subset=["time", "city"])
+    return weather.pivot(index="time", columns="city").pipe(
+        lambda w: w.set_axis([f"{v}_{c}" for v, c in w.columns], axis=1)
+    ).reset_index()
+
+
+def fetch_weather_forecast(past_days: int = 60, forecast_days: int = 2) -> pd.DataFrame:
+    """Recent weather + forecast for the next days (Open-Meteo forecast API, max 92 past days)."""
+    frames = []
+    for city, (lat, lon) in CITIES.items():
+        for attempt in range(4):
+            try:
+                r = requests.get(
+                    "https://api.open-meteo.com/v1/forecast",
+                    params={
+                        "latitude": lat,
+                        "longitude": lon,
+                        "hourly": WEATHER_VARS,
+                        "past_days": past_days,
+                        "forecast_days": forecast_days,
+                        "timezone": "Europe/Istanbul",
+                    },
+                    timeout=120,
+                )
+                r.raise_for_status()
+                break
+            except requests.RequestException as exc:
+                print(f"  weather forecast {city} failed ({exc}), retry {attempt + 1}/4")
+                time.sleep(10 * (attempt + 1))
+        else:
+            raise RuntimeError(f"Weather forecast download failed for {city}")
+        df = pd.DataFrame(r.json()["hourly"])
+        df["city"] = city
+        frames.append(df)
+    return to_wide(pd.concat(frames, ignore_index=True))
+
+
 def fetch_weather(start: date, end: date) -> pd.DataFrame:
     """Open-Meteo archive, one city and one year per request (big ranges time out)."""
     frames = []
@@ -101,13 +153,7 @@ def fetch_weather(start: date, end: date) -> pd.DataFrame:
             frames.append(df)
             print(f"  weather {city} {s}->{e}: {len(df):,} rows")
             time.sleep(1)
-    weather = pd.concat(frames, ignore_index=True)
-    weather["time"] = pd.to_datetime(weather["time"])
-    weather = weather.drop_duplicates(subset=["time", "city"])
-    # wide format: one row per hour, columns like temperature_2m_istanbul
-    return weather.pivot(index="time", columns="city").pipe(
-        lambda w: w.set_axis([f"{v}_{c}" for v, c in w.columns], axis=1)
-    ).reset_index()
+    return to_wide(pd.concat(frames, ignore_index=True))
 
 
 def main():
@@ -121,14 +167,10 @@ def main():
     args = parser.parse_args()
     start, end = date.fromisoformat(args.start), date.fromisoformat(args.end)
 
-    load_dotenv(ROOT / ".env")
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     if args.only in (None, "epias"):
-        client = EPTR2(
-            username=os.environ["EPTR_USERNAME"],
-            password=os.environ["EPTR_PASSWORD"],
-        )
+        client = make_client()
         for name, key in EPTR_DATASETS.items():
             print(f"Fetching {name} ({key}) {start} -> {end}")
             df = fetch_eptr(client, key, start, end)
