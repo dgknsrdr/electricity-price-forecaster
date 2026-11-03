@@ -1,0 +1,5 @@
+,MAE,RMSE,MAE_pct_of_mean_price
+lightgbm,389.81,560.18,17.68
+naive_d1_d7_avg,478.29,696.71,21.7
+naive_d1,520.03,806.99,23.59
+naive_d7,605.97,907.9,27.49

@@ -2,6 +2,7 @@
 .eptr2-tgt
 data/
 src/data/
+models/
 __pycache__/
 .venv/
 .idea/
